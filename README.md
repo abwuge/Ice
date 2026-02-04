@@ -14,6 +14,8 @@ Ice is a powerful menu bar management tool. While its primary function is hiding
 [![Website](https://img.shields.io/badge/Website-015FBA?style=flat-square)](https://icemenubar.app)
 [![License](https://img.shields.io/github/license/jordanbaird/Ice?style=flat-square)](LICENSE)
 
+English README → https://github.com/jordanbaird/Ice#readme
+
 > [!NOTE]
 > Ice is currently in active development. Some features have not yet been implemented. Download the latest release [here](https://github.com/jordanbaird/Ice/releases/latest) and see the roadmap below for upcoming features.
 
@@ -85,96 +87,34 @@ brew install --cask jordanbaird-ice
 
 Ice 使用了从 macOS 14 开始提供的一些系统 API，因此目前没有支持更早版本的计划。
 
-<a href="https://www.buymeacoffee.com/jordanbaird" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;">
-</a>
+### 截图
 
-## Install
-
-### Manual Installation
-
-Download the "Ice.zip" file from the [latest release](https://github.com/jordanbaird/Ice/releases/latest) and move the unzipped app into your `Applications` folder.
-
-### Homebrew
-
-Install Ice using the following command:
-
-```sh
-brew install --cask jordanbaird-ice
-```
-
-## Features/Roadmap
-
-### Menu bar item management
-
-- [x] Hide menu bar items
-- [x] "Always-hidden" menu bar section
-- [x] Show hidden menu bar items when hovering over the menu bar
-- [x] Show hidden menu bar items when an empty area in the menu bar is clicked
-- [x] Show hidden menu bar items by scrolling or swiping in the menu bar
-- [x] Automatically rehide menu bar items
-- [x] Hide application menus when they overlap with shown menu bar items
-- [x] Drag and drop interface to arrange individual menu bar items
-- [x] Display hidden menu bar items in a separate bar (e.g. for MacBooks with the notch)
-- [x] Search menu bar items
-- [x] Menu bar item spacing (BETA)
-- [ ] Profiles for menu bar layout
-- [ ] Individual spacer items
-- [ ] Menu bar item groups
-- [ ] Show menu bar items when trigger conditions are met
-
-### Menu bar appearance
-
-- [x] Menu bar tint (solid and gradient)
-- [x] Menu bar shadow
-- [x] Menu bar border
-- [x] Custom menu bar shapes (rounded and/or split)
-- [ ] Remove background behind menu bar
-- [ ] Rounded screen corners
-- [ ] Different settings for light/dark mode
-
-### Hotkeys
-
-- [x] Toggle individual menu bar sections
-- [x] Show the search panel
-- [x] Enable/disable the Ice Bar
-- [x] Show/hide section divider icons
-- [x] Toggle application menus
-- [ ] Enable/disable auto rehide
-- [ ] Temporarily show individual menu bar items
-
-### Other
-
-- [x] Launch at login
-- [x] Automatic updates
-- [ ] Menu bar widgets
-
-## Why does Ice only support macOS 14 and later?
-
-Ice uses a number of system APIs that are available starting in macOS 14. As such, there are no plans to support earlier versions of macOS.
-
-## Gallery
-
-#### Show hidden menu bar items below the menu bar
+#### 在菜单栏下方显示隐藏项目
 
 ![Ice Bar](https://github.com/user-attachments/assets/f1429589-6186-4e1b-8aef-592219d49b9b)
 
-#### Drag-and-drop interface to arrange menu bar items
+#### 拖拽排序菜单栏项目
 
 ![Menu Bar Layout](https://github.com/user-attachments/assets/095442ba-f2d0-4bb4-9632-91e26ef8d45b)
 
-#### Customize the menu bar's appearance
+#### 自定义菜单栏外观
 
 ![Menu Bar Appearance](https://github.com/user-attachments/assets/8c22c185-c3d2-49bb-971e-e1fc17df04b3)
 
-#### Menu bar item search
+#### 菜单栏项目搜索
 
 ![Menu Bar Item Search](https://github.com/user-attachments/assets/d1a7df3a-4989-4077-a0b1-8e7d5a1ba5b8)
 
-#### Custom menu bar item spacing
+#### 菜单栏项目间距
 
 ![Menu Bar Item Spacing](https://github.com/user-attachments/assets/b196aa7e-184a-4d4c-b040-502f4aae40a6)
 
-## License
+### 许可协议
 
-Ice is available under the [GPL-3.0 license](LICENSE).
+Ice 使用 [GPL-3.0 license](LICENSE) 许可发布。
+
+### 赞助
+
+<a href="https://www.buymeacoffee.com/jordanbaird" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;">
+</a>
