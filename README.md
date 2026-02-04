@@ -3,7 +3,7 @@
     <h1>Ice</h1>
 </div>
 
-Ice is a powerful menu bar management tool. While its primary function is hiding and showing menu bar items, it aims to cover a wide variety of additional features to make it one of the most versatile menu bar tools available.
+Ice 是一款强大的菜单栏管理工具。它的核心能力是隐藏与显示菜单栏项目，同时也提供丰富的外观与交互选项，目标是成为最灵活的菜单栏工具之一。
 
 ![Banner](docs/images/banner-zh.png)
 
@@ -15,9 +15,6 @@ Ice is a powerful menu bar management tool. While its primary function is hiding
 [![License](https://img.shields.io/github/license/jordanbaird/Ice?style=flat-square)](LICENSE)
 
 English README → https://github.com/jordanbaird/Ice#readme
-
-> [!NOTE]
-> Ice is currently in active development. Some features have not yet been implemented. Download the latest release [here](https://github.com/jordanbaird/Ice/releases/latest) and see the roadmap below for upcoming features.
 
 ## 中文说明
 
