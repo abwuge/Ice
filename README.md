@@ -5,7 +5,7 @@
 
 Ice is a powerful menu bar management tool. While its primary function is hiding and showing menu bar items, it aims to cover a wide variety of additional features to make it one of the most versatile menu bar tools available.
 
-![Banner](https://github.com/user-attachments/assets/4423085c-4e4b-4f3d-ad0f-90a217c03470)
+![Banner](docs/images/banner-zh.png)
 
 [![Download](https://img.shields.io/badge/download-latest-brightgreen?style=flat-square)](https://github.com/jordanbaird/Ice/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-macOS-blue?style=flat-square)
@@ -95,7 +95,7 @@ Ice 使用了从 macOS 14 开始提供的一些系统 API，因此目前没有�
 
 #### 拖拽排序菜单栏项目
 
-![Menu Bar Layout](https://github.com/user-attachments/assets/095442ba-f2d0-4bb4-9632-91e26ef8d45b)
+![Menu Bar Layout](docs/images/menu-bar-layout-zh.png)
 
 #### 自定义菜单栏外观
 
