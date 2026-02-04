@@ -25,13 +25,15 @@ Ice 是一款强大的菜单栏管理工具。它的核心能力是隐藏与显�
 
 #### 手动安装
 
-从 [最新版本](https://github.com/jordanbaird/Ice/releases/latest) 下载 `Ice.zip`，解压后将 `Ice.app` 拖到 `Applications` 文件夹。
+从 [原版英文最新版本](https://github.com/jordanbaird/Ice/releases/latest) 下载 `Ice.zip`，或从 [简体中文汉化版](https://github.com/mianm1986/Ice/releases/tag/v0.11.12-zh) 下载 `Ice.zip`。解压后将 `Ice.app` 拖到 `Applications` 文件夹。
 
 #### Homebrew
 
 ```sh
 brew install --cask jordanbaird-ice
 ```
+
+说明：Homebrew 安装的是原版英文版本。
 
 ### 功能/路线图
 
