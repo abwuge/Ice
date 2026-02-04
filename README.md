@@ -17,6 +17,72 @@ Ice is a powerful menu bar management tool. While its primary function is hiding
 > [!NOTE]
 > Ice is currently in active development. Some features have not yet been implemented. Download the latest release [here](https://github.com/jordanbaird/Ice/releases/latest) and see the roadmap below for upcoming features.
 
+## 中文说明
+
+Ice 是一款强大的菜单栏管理工具。它的核心能力是隐藏与显示菜单栏项目，同时也提供丰富的外观与交互选项，目标是成为最灵活的菜单栏工具之一。
+
+### 安装
+
+#### 手动安装
+
+从 [最新版本](https://github.com/jordanbaird/Ice/releases/latest) 下载 `Ice.zip`，解压后将 `Ice.app` 拖到 `Applications` 文件夹。
+
+#### Homebrew
+
+```sh
+brew install --cask jordanbaird-ice
+```
+
+### 功能/路线图
+
+#### 菜单栏项目管理
+
+- [x] 隐藏菜单栏项目
+- [x] “始终隐藏”分区
+- [x] 鼠标悬停时显示隐藏项目
+- [x] 点击菜单栏空白处显示隐藏项目
+- [x] 滚动或滑动显示隐藏项目
+- [x] 自动重新隐藏
+- [x] 隐藏会与菜单栏项目重叠的应用菜单
+- [x] 拖拽排序菜单栏项目
+- [x] 在独立栏中显示隐藏项目（例如带刘海的 Mac）
+- [x] 搜索菜单栏项目
+- [x] 菜单栏项目间距（测试版）
+- [ ] 菜单栏布局配置文件
+- [ ] 独立分隔项
+- [ ] 菜单栏项目分组
+- [ ] 满足触发条件时显示项目
+
+#### 菜单栏外观
+
+- [x] 菜单栏着色（纯色与渐变）
+- [x] 菜单栏阴影
+- [x] 菜单栏边框
+- [x] 自定义菜单栏形状（圆角与分割）
+- [ ] 移除菜单栏背景
+- [ ] 屏幕圆角
+- [ ] 深色/浅色模式分别配置
+
+#### 快捷键
+
+- [x] 切换各菜单栏分区
+- [x] 打开搜索面板
+- [x] 启用/停用 Ice Bar
+- [x] 显示/隐藏分区分隔图标
+- [x] 切换应用菜单
+- [ ] 启用/停用自动重新隐藏
+- [ ] 临时显示单个菜单栏项目
+
+#### 其他
+
+- [x] 开机自启
+- [x] 自动更新
+- [ ] 菜单栏小组件
+
+### 为什么只支持 macOS 14 及以上？
+
+Ice 使用了从 macOS 14 开始提供的一些系统 API，因此目前没有支持更早版本的计划。
+
 <a href="https://www.buymeacoffee.com/jordanbaird" target="_blank">
     <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;">
 </a>
