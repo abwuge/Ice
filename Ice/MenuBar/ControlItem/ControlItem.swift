@@ -463,10 +463,10 @@ final class ControlItem {
             return hotkeySettingsManager.hotkey(withAction: action)
         }
 
-        let menu = NSMenu(title: "Ice")
+        let menu = NSMenu(title: NSLocalizedString("Ice", comment: "Menu title"))
 
         let settingsItem = NSMenuItem(
-            title: "Ice Settings…",
+            title: NSLocalizedString("Ice Settings…", comment: "Menu item"),
             action: #selector(AppDelegate.openSettingsWindow),
             keyEquivalent: ","
         )
@@ -476,7 +476,7 @@ final class ControlItem {
         menu.addItem(.separator())
 
         let searchItem = NSMenuItem(
-            title: "Search Menu Bar Items",
+            title: NSLocalizedString("Search Menu Bar Items", comment: "Menu item"),
             action: #selector(showSearchPanel),
             keyEquivalent: ""
         )
@@ -503,7 +503,15 @@ final class ControlItem {
                 continue
             }
             let item = NSMenuItem(
-                title: "\(section.isHidden ? "Show" : "Hide") the \(name.displayString) Section",
+                title: section.isHidden
+                    ? String(
+                        format: NSLocalizedString("Show the %@ Section", comment: "Menu item"),
+                        name.displayString
+                    )
+                    : String(
+                        format: NSLocalizedString("Hide the %@ Section", comment: "Menu item"),
+                        name.displayString
+                    ),
                 action: #selector(toggleMenuBarSection),
                 keyEquivalent: ""
             )
@@ -535,7 +543,7 @@ final class ControlItem {
         menu.addItem(.separator())
 
         let checkForUpdatesItem = NSMenuItem(
-            title: "Check for Updates…",
+            title: NSLocalizedString("Check for Updates…", comment: "Menu item"),
             action: #selector(checkForUpdates),
             keyEquivalent: ""
         )
@@ -545,7 +553,7 @@ final class ControlItem {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Quit Ice",
+            title: NSLocalizedString("Quit Ice", comment: "Menu item"),
             action: #selector(NSApp.terminate),
             keyEquivalent: "q"
         )
