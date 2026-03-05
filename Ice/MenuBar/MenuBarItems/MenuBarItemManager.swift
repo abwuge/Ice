@@ -47,6 +47,21 @@ final class MenuBarItemManager: ObservableObject {
                         return false
                     }
                 }
+                
+                // macOS 26 fix: Filter out system control center's HItem (used for hiding)
+                // It has abnormally large width and should not be displayed
+                if item.frame.width > 200 {
+                    return false
+                }
+                
+                // Filter out control center items with HItem or AHItem titles
+                // These are system hiding mechanisms, not actual menu bar items
+                if let title = item.title {
+                    let baseTitle = title.components(separatedBy: "#").first ?? title
+                    if baseTitle == "HItem" || baseTitle == "AHItem" {
+                        return false
+                    }
+                }
 
                 return true
             }
@@ -115,26 +130,9 @@ final class MenuBarItemManager: ObservableObject {
     /// The last time a menu bar item was moved.
     private var lastItemMoveStartDate: Date?
 
-    /// The last time the mouse was moved.
-    private var lastMouseMoveStartDate: Date?
-
     /// Counter to determine if a menu bar item, or group of menu bar
     /// items is being moved.
     private var itemMoveCount = 0
-
-    /// A Boolean value that indicates whether a mouse button is down.
-    private var isMouseButtonDown = false
-
-    /// Event type mask for tracking mouse events.
-    private let mouseTrackingMask: NSEvent.EventTypeMask = [
-        .mouseMoved,
-        .leftMouseDown,
-        .rightMouseDown,
-        .otherMouseDown,
-        .leftMouseUp,
-        .rightMouseUp,
-        .otherMouseUp,
-    ]
 
     /// A Boolean value that indicates whether a menu bar item, or
     /// group of menu bar items is being moved.
@@ -149,14 +147,6 @@ final class MenuBarItemManager: ObservableObject {
             return false
         }
         return Date.now.timeIntervalSince(lastItemMoveStartDate) <= 1
-    }
-
-    /// A Boolean value that indicates whether the mouse has recently moved.
-    var mouseHasRecentlyMoved: Bool {
-        guard let lastMouseMoveStartDate else {
-            return false
-        }
-        return Date.now.timeIntervalSince(lastMouseMoveStartDate) <= 1
     }
 
     /// Creates a manager with the given app state.
@@ -198,28 +188,6 @@ final class MenuBarItemManager: ObservableObject {
             }
             .store(in: &c)
 
-        Publishers.Merge(
-            UniversalEventMonitor.publisher(for: mouseTrackingMask),
-            RunLoopLocalEventMonitor.publisher(for: mouseTrackingMask, mode: .eventTracking)
-        )
-        .removeDuplicates()
-        .sink { [weak self] event in
-            guard let self else {
-                return
-            }
-            switch event.type {
-            case .mouseMoved:
-                lastMouseMoveStartDate = .now
-            case .leftMouseDown, .rightMouseDown, .otherMouseDown:
-                isMouseButtonDown = true
-            case .leftMouseUp, .rightMouseUp, .otherMouseUp:
-                isMouseButtonDown = false
-            default:
-                break
-            }
-        }
-        .store(in: &c)
-
         cancellables = c
     }
 }
@@ -244,8 +212,9 @@ extension MenuBarItemManager {
         alwaysHiddenControlItem: MenuBarItem?,
         otherItems: [MenuBarItem]
     ) {
-        Logger.itemManager.debug("Caching menu bar items")
+        Logger.itemManager.debug("Caching menu bar items: otherItems=\(otherItems.count), hiddenControlItem.frame=\(hiddenControlItem.frame)")
 
+        Logger.itemManager.debug("Creating predicates: hiddenControlItem.frame=\(hiddenControlItem.frame), alwaysHiddenControlItem.frame=\(alwaysHiddenControlItem?.frame ?? .zero)")
         let predicates = Predicates.sectionPredicates(
             hiddenControlItem: hiddenControlItem,
             alwaysHiddenControlItem: alwaysHiddenControlItem
@@ -254,6 +223,7 @@ extension MenuBarItemManager {
         var cache = ItemCache()
         var tempShownItems = [(MenuBarItem, MoveDestination)]()
 
+        var visibleCount = 0, hiddenCount = 0, alwaysHiddenCount = 0, notCachedCount = 0
         for item in otherItems {
             if let context = tempShownItemContexts.first(where: { $0.info == item.info }) {
                 // Keep track of temporarily shown items and their return destinations separately.
@@ -263,12 +233,27 @@ extension MenuBarItemManager {
                 tempShownItems.append((item, context.returnDestination))
             } else if predicates.isInVisibleSection(item) {
                 cache[.visible].append(item)
+                visibleCount += 1
             } else if predicates.isInHiddenSection(item) {
                 cache[.hidden].append(item)
+                hiddenCount += 1
             } else if predicates.isInAlwaysHiddenSection(item) {
                 cache[.alwaysHidden].append(item)
+                alwaysHiddenCount += 1
             } else {
+                notCachedCount += 1
+                Logger.itemManager.debug("Item not cached: \(item.info), frame=\(item.frame)")
                 logNotCachedWarning(for: item)
+            }
+        }
+        Logger.itemManager.debug("Classification: visible=\(visibleCount), hidden=\(hiddenCount), alwaysHidden=\(alwaysHiddenCount), notCached=\(notCachedCount)")
+        
+        // Debug: log hidden section items and check for abnormal frames
+        for item in cache[.hidden] {
+            Logger.itemManager.debug("Hidden item: \(item.info), windowID=\(item.windowID), frame=\(item.frame)")
+            // Flag items with unusually large width (potential issue)
+            if item.frame.width > 200 {
+                Logger.itemManager.warning("Hidden item has abnormally large width: \(item.info), width=\(item.frame.width)")
             }
         }
 
@@ -334,9 +319,121 @@ extension MenuBarItemManager {
         }
 
         var items = MenuBarItem.getMenuBarItems(onScreenOnly: false, activeSpaceOnly: true)
+        Logger.itemManager.debug("Total menu bar items from system: \(items.count)")
 
-        let hiddenControlItem = items.firstIndex(matching: .hiddenControlItem).map { items.remove(at: $0) }
-        let alwaysHiddenControlItem = items.firstIndex(matching: .alwaysHiddenControlItem).map { items.remove(at: $0) }
+        // macOS 26 fix: Ice's control items are not returned by CGSGetProcessMenuBarWindowList
+        // and CGWindowListCreateDescriptionFromArray doesn't work with new window ID format
+        // So we create MenuBarItems directly from ControlItem's window properties
+        var visibleControlItem: MenuBarItem?
+        var hiddenControlItem: MenuBarItem?
+        var alwaysHiddenControlItem: MenuBarItem?
+        
+        if let appState {
+            Logger.itemManager.debug("Checking \(appState.menuBarManager.sections.count) sections for control items")
+            for section in appState.menuBarManager.sections {
+                let controlItem = section.controlItem
+                guard controlItem.window != nil else {
+                    Logger.itemManager.debug("Section \(section.name): no window")
+                    continue
+                }
+                
+                // Create MenuBarItem directly from ControlItem's window
+                guard let windowID = controlItem.windowID,
+                      let buttonFrame = controlItem.buttonFrameInScreen else {
+                    Logger.itemManager.debug("Section \(section.name): windowID or buttonFrame is nil")
+                    continue
+                }
+                Logger.itemManager.debug("Section \(section.name): buttonFrame=\(buttonFrame)")
+                if let menuBarItem = MenuBarItem(buttonFrame: buttonFrame, windowID: windowID, sectionName: section.name) {
+                    switch section.name {
+                    case .visible:
+                        visibleControlItem = menuBarItem
+                        // Ice icon - add to items if not already present
+                        if !items.contains(where: { $0.info == menuBarItem.info }) {
+                            items.append(menuBarItem)
+                        }
+                    case .hidden:
+                        hiddenControlItem = menuBarItem
+                        Logger.itemManager.debug("Found hidden control item from ControlItem")
+                    case .alwaysHidden:
+                        alwaysHiddenControlItem = menuBarItem
+                        Logger.itemManager.debug("Found alwaysHidden control item from ControlItem")
+                    }
+                } else {
+                    Logger.itemManager.debug("MenuBarItem init from ControlItem failed for section \(section.name)")
+                }
+            }
+            
+            // macOS 26 fix: Use Ice Icon position as boundary when hidden control item is expanded
+            // The Ice Icon (visible control item) sits at the boundary between visible and hidden sections
+            // Items to the RIGHT of Ice Icon are visible, items to the LEFT are hidden
+            if let visibleControlItem, let existingHiddenControlItem = hiddenControlItem {
+                let iceIconMinX = visibleControlItem.frame.minX
+                // The hidden control item should be positioned just to the LEFT of Ice Icon
+                // Its maxX should equal Ice Icon's minX so that:
+                // - isInVisibleSection: item.minX >= hiddenControlItem.maxX (i.e., item.minX >= iceIconMinX)
+                // - isInHiddenSection: item.maxX <= hiddenControlItem.minX (i.e., item.maxX <= iceIconMinX - 1)
+                let correctedFrame = CGRect(
+                    x: iceIconMinX - 1,  // minX = iceIconMinX - 1
+                    y: existingHiddenControlItem.frame.origin.y,
+                    width: 1,            // maxX = iceIconMinX
+                    height: existingHiddenControlItem.frame.height
+                )
+                Logger.itemManager.debug("Correcting hiddenControlItem: iceIconMinX=\(iceIconMinX), correctedFrame=\(correctedFrame)")
+                // Create a new MenuBarItem with corrected frame
+                let correctedWindow = WindowInfo.synthetic(
+                    windowID: existingHiddenControlItem.windowID,
+                    frame: correctedFrame,
+                    title: existingHiddenControlItem.title,
+                    ownerPID: existingHiddenControlItem.ownerPID
+                )
+                // Update the outer variable
+                hiddenControlItem = MenuBarItem(
+                    syntheticWindow: correctedWindow,
+                    info: existingHiddenControlItem.info
+                )
+            }
+            
+            // macOS 26: The alwaysHiddenControlItem also has expanded frame (5000px width)
+            // Layout: [alwaysHidden items] | alwaysHiddenControlItem | [hidden items] | hiddenControlItem | [visible items]
+            // 
+            // Hidden items are moved to negative x positions (off-screen left) when hidden.
+            // alwaysHiddenControlItem must be at a MORE NEGATIVE position than hidden items
+            // so that hidden items satisfy: item.minX >= alwaysHiddenControlItem.maxX
+            //
+            // For now, place alwaysHiddenControlItem at x=-50000 (very far left)
+            // This ensures all hidden items (typically at x=-100 to x=-5000) are in hidden section
+            // Only items explicitly moved further left would be in alwaysHidden section
+            if let existingAlwaysHiddenControlItem = alwaysHiddenControlItem {
+                Logger.itemManager.debug("alwaysHiddenControlItem original frame: \(existingAlwaysHiddenControlItem.frame)")
+                
+                let correctedFrame = CGRect(
+                    x: -50000,  // Very far left - hidden items are typically at x=-100 to x=-5000
+                    y: existingAlwaysHiddenControlItem.frame.origin.y,
+                    width: 1,
+                    height: existingAlwaysHiddenControlItem.frame.height
+                )
+                Logger.itemManager.debug("Correcting alwaysHiddenControlItem to \(correctedFrame)")
+                let correctedWindow = WindowInfo.synthetic(
+                    windowID: existingAlwaysHiddenControlItem.windowID,
+                    frame: correctedFrame,
+                    title: existingAlwaysHiddenControlItem.title,
+                    ownerPID: existingAlwaysHiddenControlItem.ownerPID
+                )
+                alwaysHiddenControlItem = MenuBarItem(
+                    syntheticWindow: correctedWindow,
+                    info: existingAlwaysHiddenControlItem.info
+                )
+            }
+        }
+        
+        // If we still couldn't find the control items, try the original method
+        if hiddenControlItem == nil {
+            hiddenControlItem = items.firstIndex(matching: .hiddenControlItem).map { items.remove(at: $0) }
+        }
+        if alwaysHiddenControlItem == nil {
+            alwaysHiddenControlItem = items.firstIndex(matching: .alwaysHiddenControlItem).map { items.remove(at: $0) }
+        }
 
         guard let hiddenControlItem else {
             Logger.itemManager.warning("Missing control item for hidden section")
@@ -352,16 +449,18 @@ extension MenuBarItemManager {
                     alwaysHiddenControlItem: alwaysHiddenControlItem
                 )
             }
-            uncheckedCacheItems(
-                hiddenControlItem: hiddenControlItem,
-                alwaysHiddenControlItem: alwaysHiddenControlItem,
-                otherItems: items
-            )
         } catch {
-            Logger.itemManager.error("Error enforcing control item order: \(error)")
-            Logger.itemManager.debug("Clearing menu bar item cache")
-            itemCache.clear()
+            // macOS 26: enforceControlItemOrder may fail due to window ID format changes
+            // Continue with caching anyway
+            Logger.itemManager.warning("Error enforcing control item order (continuing anyway): \(error)")
         }
+        
+        // Always try to cache items, even if enforceControlItemOrder failed
+        uncheckedCacheItems(
+            hiddenControlItem: hiddenControlItem,
+            alwaysHiddenControlItem: alwaysHiddenControlItem,
+            otherItems: items
+        )
     }
 }
 
@@ -480,7 +579,7 @@ extension MenuBarItemManager {
 
 extension MenuBarItemManager {
     /// Waits asynchronously for the given operation to complete.
-    /// 
+    ///
     /// - Parameters:
     ///   - timeout: Amount of time to wait before throwing an error.
     ///   - operation: The operation to perform.
@@ -510,51 +609,73 @@ extension MenuBarItemManager {
 
     /// Waits asynchronously for the mouse to stop moving.
     ///
-    /// - Parameters:
-    ///   - threshold: A threshold to use to determine whether the mouse has stopped moving.
-    ///   - timeout: Amount of time to wait before throwing an error.
-    func waitForMouseToStopMoving(threshold: TimeInterval = 0.1, timeout: Duration? = nil) async throws {
-        try await waitWithTask(timeout: timeout) { [weak self] in
-            guard let self else {
-                return
-            }
+    /// - Parameter timeout: Amount of time to wait before throwing an error.
+    private func waitForMouseToStopMoving(timeout: Duration? = nil) async throws {
+        let duration = Duration.milliseconds(100)
+        guard MouseEvents.lastMovementOccurred(within: duration) else {
+            return
+        }
+        try await waitWithTask(timeout: timeout) {
             while true {
                 try Task.checkCancellation()
-                guard let date = await lastMouseMoveStartDate else {
+                if !MouseEvents.lastMovementOccurred(within: duration) {
                     break
                 }
-                if Date.now.timeIntervalSince(date) > threshold {
-                    break
-                }
-                try await Task.sleep(for: .milliseconds(10))
+                try await Task.sleep(for: duration)
             }
         }
     }
 
-    /// Waits asynchronously until no modifier keys are pressed.
+    /// Waits asynchronously until all mouse buttons are up.
     ///
     /// - Parameter timeout: Amount of time to wait before throwing an error.
-    func waitForNoModifiersPressed(timeout: Duration? = nil) async throws {
+    private func waitForAllMouseButtonsUp(timeout: Duration? = nil) async throws {
+        guard MouseEvents.isButtonPressed() else {
+            return
+        }
         try await waitWithTask(timeout: timeout) {
-            // Return early if no flags are pressed.
-            if NSEvent.modifierFlags.isEmpty {
-                return
-            }
-
             var cancellable: AnyCancellable?
 
             await withCheckedContinuation { continuation in
-                cancellable = Publishers.Merge(
-                    UniversalEventMonitor.publisher(for: .flagsChanged),
-                    RunLoopLocalEventMonitor.publisher(for: .flagsChanged, mode: .eventTracking)
-                )
-                .removeDuplicates()
-                .sink { _ in
-                    if NSEvent.modifierFlags.isEmpty {
+                let mask: NSEvent.EventTypeMask = [.leftMouseUp, .rightMouseUp, .otherMouseUp]
+                cancellable = RunLoopLocalEventMonitor.publisher(for: mask, mode: .eventTracking)
+                    .merge(with: UniversalEventMonitor.publisher(for: mask))
+                    .removeDuplicates()
+                    .combineLatest(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect())
+                    .sink { _ in
+                        if MouseEvents.isButtonPressed() {
+                            return
+                        }
                         cancellable?.cancel()
                         continuation.resume()
                     }
-                }
+            }
+        }
+    }
+
+    /// Waits asynchronously until all modifier keys are up.
+    ///
+    /// - Parameter timeout: Amount of time to wait before throwing an error.
+    private func waitForAllModifierKeysUp(timeout: Duration? = nil) async throws {
+        if NSEvent.modifierFlags.isEmpty {
+            return
+        }
+        try await waitWithTask(timeout: timeout) {
+            var cancellable: AnyCancellable?
+
+            await withCheckedContinuation { continuation in
+                let mask: NSEvent.EventTypeMask = .flagsChanged
+                cancellable = RunLoopLocalEventMonitor.publisher(for: mask, mode: .eventTracking)
+                    .merge(with: UniversalEventMonitor.publisher(for: mask))
+                    .removeDuplicates()
+                    .combineLatest(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect())
+                    .sink { _ in
+                        guard NSEvent.modifierFlags.isEmpty else {
+                            return
+                        }
+                        cancellable?.cancel()
+                        continuation.resume()
+                    }
             }
         }
     }
@@ -1079,10 +1200,18 @@ extension MenuBarItemManager {
         }
 
         do {
-            // Order of these waiters matters, as the modifiers could be released
-            // while the mouse is still moving.
-            try await waitForNoModifiersPressed()
+            // FIXME: Running these checks sequentially like this is prone to error.
+            //
+            // For example, say the user is holding down a modifier key while moving
+            // their mouse - they release the modifier, continue moving their mouse,
+            // then press the modifier again. We would completely miss this, as the
+            // modifier check would already be finished. We'd have the same problem
+            // running the checks concurrently.
+            //
+            // We need a way to cooperatively restart each check as needed.
+            try await waitForAllModifierKeysUp()
             try await waitForMouseToStopMoving()
+            try await waitForAllMouseButtonsUp()
         } catch {
             throw EventError(code: .couldNotComplete, item: item)
         }
@@ -1326,6 +1455,42 @@ extension MenuBarItemManager {
         Logger.itemManager.info("Temporarily showing \(item.logString)")
 
         var items = MenuBarItem.getMenuBarItems(onScreenOnly: false, activeSpaceOnly: true)
+        Logger.itemManager.debug("tempShowItem: got \(items.count) items from getMenuBarItems")
+        
+        // macOS 26 fix: Ice control items may not be returned by getMenuBarItems
+        // Check if hidden control item is already in the list
+        let hasHiddenControlItem = items.contains(where: { $0.info == .hiddenControlItem })
+        Logger.itemManager.debug("tempShowItem: hasHiddenControlItem=\(hasHiddenControlItem)")
+        
+        if !hasHiddenControlItem {
+            // Add hidden control item with a synthetic 1px frame
+            // Use the first visible item's position as reference (items are sorted by x position)
+            if let hiddenSection = appState.menuBarManager.section(withName: .hidden),
+               let windowID = hiddenSection.controlItem.windowID,
+               let firstVisibleItem = items.first(where: { $0.isOnScreen && $0.frame.minX > 100 }) {
+                // Place hidden control item just to the left of visible items
+                let syntheticFrame = CGRect(
+                    x: firstVisibleItem.frame.minX - 1,
+                    y: firstVisibleItem.frame.minY,
+                    width: 1,
+                    height: firstVisibleItem.frame.height
+                )
+                let syntheticWindow = WindowInfo.synthetic(
+                    windowID: windowID,
+                    frame: syntheticFrame,
+                    title: ControlItem.Identifier.hidden.rawValue,
+                    ownerPID: ProcessInfo.processInfo.processIdentifier
+                )
+                let syntheticItem = MenuBarItem(
+                    syntheticWindow: syntheticWindow,
+                    info: .hiddenControlItem
+                )
+                items.append(syntheticItem)
+                Logger.itemManager.debug("tempShowItem: added synthetic hidden control item at x=\(syntheticFrame.minX)")
+            } else {
+                Logger.itemManager.debug("tempShowItem: could not add hidden control item")
+            }
+        }
 
         guard let destination = getReturnDestination(for: item, in: items) else {
             Logger.itemManager.warning("No return destination for \(item.logString)")
@@ -1335,25 +1500,44 @@ extension MenuBarItemManager {
         // Remove all items up to the hidden control item.
         items.trimPrefix { $0.info != .hiddenControlItem }
         // Remove the hidden control item.
-        items.removeFirst()
-        // Remove all offscreen items.
-        items.trimPrefix { !$0.isOnScreen }
+        // macOS 26 fix: Check if items is not empty before calling removeFirst()
+        if !items.isEmpty {
+            items.removeFirst()
+        } else {
+            Logger.itemManager.warning("No hidden control item found in items list")
+            return
+        }
+        // macOS 26 fix: Instead of filtering offscreen items, find visible items directly
+        // The hidden items have negative x coordinates and isOnScreen=false
+        // We need to find a target position in the visible menu bar area
+        let visibleItems = MenuBarItem.getMenuBarItems(onScreenOnly: true, activeSpaceOnly: true)
+        Logger.itemManager.debug("tempShowItem: got \(visibleItems.count) visible items")
 
         let maxX = if let rightArea = screen.auxiliaryTopRightArea {
             max(rightArea.minX + 20, applicationMenuFrame.maxX)
         } else {
             applicationMenuFrame.maxX
         }
+        Logger.itemManager.debug("tempShowItem: maxX=\(maxX), item.frame.width=\(item.frame.width)")
 
-        // Remove items until we have enough room to show this item.
-        items.trimPrefix { $0.frame.minX - item.frame.width <= maxX }
+        // Find visible items that have enough room to the left
+        var targetCandidates = visibleItems.filter { $0.frame.minX - item.frame.width > maxX }
+        Logger.itemManager.debug("tempShowItem: \(targetCandidates.count) target candidates")
+        
+        // Sort by x position to get the leftmost candidate
+        targetCandidates.sort { $0.frame.minX < $1.frame.minX }
 
-        guard let targetItem = items.first else {
+        guard let targetItem = targetCandidates.first else {
+            Logger.itemManager.warning("tempShowItem: Not enough room - maxX=\(maxX), item.frame.width=\(item.frame.width), visibleItems=\(visibleItems.count)")
             let alert = NSAlert()
-            alert.messageText = "Not enough room to show \"\(item.displayName)\""
+            alert.messageText = String(
+                format: NSLocalizedString("Not enough room to show \"%@\"", comment: "Alert title"),
+                item.displayName
+            )
             alert.runModal()
             return
         }
+        Logger.itemManager.debug("tempShowItem: target item at x=\(targetItem.frame.minX)")
 
         let initialWindows = WindowInfo.getOnScreenWindows()
 
@@ -1408,7 +1592,7 @@ extension MenuBarItemManager {
             return
         }
 
-        guard !isMouseButtonDown else {
+        guard !MouseEvents.isButtonPressed() else {
             Logger.itemManager.debug("Mouse button is down, so waiting to rehide")
             runTempShownItemTimer(for: 3)
             return
@@ -1473,11 +1657,11 @@ extension MenuBarItemManager {
     ///   - alwaysHiddenControlItem: A menu bar item that represents the control item
     ///     for the always-hidden section.
     func enforceControlItemOrder(hiddenControlItem: MenuBarItem, alwaysHiddenControlItem: MenuBarItem) async throws {
-        guard !isMouseButtonDown else {
+        guard !MouseEvents.isButtonPressed() else {
             Logger.itemManager.debug("Mouse button is down, so will not enforce control item order")
             return
         }
-        guard !mouseHasRecentlyMoved else {
+        guard !MouseEvents.lastMovementOccurred(within: .seconds(1)) else {
             Logger.itemManager.debug("Mouse has recently moved, so will not enforce control item order")
             return
         }

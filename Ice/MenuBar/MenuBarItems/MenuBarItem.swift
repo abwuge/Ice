@@ -68,7 +68,7 @@ struct MenuBarItem {
     /// A name associated with the item that is suited for display to
     /// the user.
     var displayName: String {
-        var fallback: String { "Unknown" }
+        var fallback: String { NSLocalizedString("Unknown", comment: "Fallback menu bar item name") }
         guard let owningApplication else {
             return ownerName ?? title ?? fallback
         }
@@ -85,24 +85,35 @@ struct MenuBarItem {
         return switch MenuBarItemInfo.Namespace(owningApplication.bundleIdentifier) {
         case .controlCenter:
             switch title {
-            case "AccessibilityShortcuts": "Accessibility Shortcuts"
+            case "AccessibilityShortcuts":
+                NSLocalizedString("Accessibility Shortcuts", comment: "Control Center item")
             case "BentoBox": bestName // Control Center
-            case "FocusModes": "Focus"
-            case "KeyboardBrightness": "Keyboard Brightness"
-            case "MusicRecognition": "Music Recognition"
-            case "NowPlaying": "Now Playing"
-            case "ScreenMirroring": "Screen Mirroring"
-            case "StageManager": "Stage Manager"
-            case "UserSwitcher": "Fast User Switching"
-            case "WiFi": "Wi-Fi"
+            case "FocusModes":
+                NSLocalizedString("Focus", comment: "Control Center item")
+            case "KeyboardBrightness":
+                NSLocalizedString("Keyboard Brightness", comment: "Control Center item")
+            case "MusicRecognition":
+                NSLocalizedString("Music Recognition", comment: "Control Center item")
+            case "NowPlaying":
+                NSLocalizedString("Now Playing", comment: "Control Center item")
+            case "ScreenMirroring":
+                NSLocalizedString("Screen Mirroring", comment: "Control Center item")
+            case "StageManager":
+                NSLocalizedString("Stage Manager", comment: "Control Center item")
+            case "UserSwitcher":
+                NSLocalizedString("Fast User Switching", comment: "Control Center item")
+            case "WiFi":
+                NSLocalizedString("Wi-Fi", comment: "Control Center item")
             default: title
             }
         case .systemUIServer:
             switch title {
-            case "TimeMachine.TMMenuExtraHost"/*Sonoma*/, "TimeMachineMenuExtra.TMMenuExtraHost"/*Sequoia*/: "Time Machine"
+            case "TimeMachine.TMMenuExtraHost"/*Sonoma*/, "TimeMachineMenuExtra.TMMenuExtraHost"/*Sequoia*/:
+                NSLocalizedString("Time Machine", comment: "System menu bar item")
             default: title
             }
-        case MenuBarItemInfo.Namespace("com.apple.Passwords.MenuBarExtra"): "Passwords"
+        case MenuBarItemInfo.Namespace("com.apple.Passwords.MenuBarExtra"):
+            NSLocalizedString("Passwords", comment: "System menu bar item")
         default:
             bestName
         }
@@ -130,6 +141,8 @@ struct MenuBarItem {
         self.info = MenuBarItemInfo(uncheckedItemWindow: itemWindow)
     }
 
+    private static let logger = Logger(category: "MenuBarItem")
+    
     /// Creates a menu bar item.
     ///
     /// The parameters passed into this initializer are verified during the menu
@@ -138,6 +151,10 @@ struct MenuBarItem {
     ///
     /// - Parameter itemWindow: A window that contains information about the item.
     init?(itemWindow: WindowInfo) {
+        // Debug: log Ice's own windows that fail isMenuBarItem check
+        if itemWindow.owningApplication == .current && !itemWindow.isMenuBarItem {
+            Self.logger.debug("Ice window failed isMenuBarItem: layer=\(itemWindow.layer), expected=\(Int(kCGStatusWindowLevel)), title=\(itemWindow.title ?? "nil")")
+        }
         guard itemWindow.isMenuBarItem else {
             return nil
         }
@@ -154,9 +171,66 @@ struct MenuBarItem {
     ///   about the item.
     init?(windowID: CGWindowID) {
         guard let window = WindowInfo(windowID: windowID) else {
+            Self.logger.debug("WindowInfo init failed for windowID: \(windowID)")
             return nil
         }
+        // Debug: log if this is an Ice window
+        if window.owningApplication == .current {
+            Self.logger.debug("Found Ice window: windowID=\(windowID), layer=\(window.layer), title=\(window.title ?? "nil"), isMenuBarItem=\(window.isMenuBarItem)")
+        }
         self.init(itemWindow: window)
+    }
+    
+    /// Creates a menu bar item directly from a ControlItem's button frame.
+    /// This is used for macOS 26+ where CGWindowListCreateDescriptionFromArray
+    /// doesn't work with the new window ID format.
+    ///
+    /// - Parameters:
+    ///   - buttonFrame: The button's frame in screen coordinates.
+    ///   - windowID: The window ID.
+    ///   - sectionName: The section name (used to determine the control item identifier).
+    @MainActor
+    init?(buttonFrame: CGRect, windowID: CGWindowID, sectionName: MenuBarSection.Name) {
+        // Convert to the coordinate system used by CGWindowList (origin at top-left)
+        guard let screen = NSScreen.main else {
+            return nil
+        }
+        let frame = CGRect(
+            x: buttonFrame.origin.x,
+            y: screen.frame.height - buttonFrame.origin.y - buttonFrame.height,
+            width: buttonFrame.width,
+            height: buttonFrame.height
+        )
+        let title: String = switch sectionName {
+        case .visible: ControlItem.Identifier.iceIcon.rawValue
+        case .hidden: ControlItem.Identifier.hidden.rawValue
+        case .alwaysHidden: ControlItem.Identifier.alwaysHidden.rawValue
+        }
+        let ownerPID = ProcessInfo.processInfo.processIdentifier
+        
+        // Create MenuBarItemInfo directly
+        let info = MenuBarItemInfo(
+            namespace: .ice,
+            title: title
+        )
+        
+        // Always use synthetic WindowInfo for control items on macOS 26+
+        // because CGWindowListCreateDescriptionFromArray returns incorrect frame
+        Self.logger.debug("Creating synthetic MenuBarItem for \(title) with frame \(frame)")
+        self.window = WindowInfo.synthetic(
+            windowID: windowID,
+            frame: frame,
+            title: title,
+            ownerPID: ownerPID
+        )
+        self.info = info
+    }
+    
+    /// Creates a menu bar item with a synthetic window and info.
+    /// Used for macOS 26+ frame correction.
+    init(syntheticWindow: WindowInfo, info: MenuBarItemInfo) {
+        self.window = syntheticWindow
+        self.info = info
     }
 }
 
@@ -182,7 +256,8 @@ extension MenuBarItem {
         }
         if activeSpaceOnly {
             option.insert(.activeSpace)
-            titlePredicate = { $0.title != "" }
+            // Allow Ice's own items (control items) through even if title is empty
+            titlePredicate = { $0.title != "" || $0.owningApplication == .current }
         }
         if let display {
             let displayBounds = CGDisplayBounds(display)
@@ -194,7 +269,17 @@ extension MenuBarItem {
             }
         }
 
-        return Bridging.getWindowList(option: option).lazy
+        let windowIDs = Bridging.getWindowList(option: option)
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        
+        // Debug: check each windowID
+        for windowID in windowIDs {
+            if let window = WindowInfo(windowID: windowID), window.ownerPID == currentPID {
+                logger.debug("Ice window in list: windowID=\(windowID), layer=\(window.layer), isMenuBarItem=\(window.isMenuBarItem), title=\(window.title ?? "nil")")
+            }
+        }
+        
+        return windowIDs.lazy
             .filter(boundsPredicate)
             .compactMap { windowID in
                 MenuBarItem(windowID: windowID)
@@ -220,6 +305,8 @@ extension MenuBarItem: Hashable {
 
 // MARK: MenuBarItemInfo Unchecked Item Window Initializer
 private extension MenuBarItemInfo {
+    private static let logger = Logger(category: "MenuBarItemInfo")
+    
     /// Creates a simplified item from the given window.
     ///
     /// This initializer does not perform any checks on the window to ensure that
@@ -232,9 +319,21 @@ private extension MenuBarItemInfo {
             self.namespace = .null
         }
         if let title = itemWindow.title {
-            self.title = title
+            // macOS 26 fix: Multiple control center items may have the same title (e.g., "Item-0")
+            // Include windowID in title to make each item unique
+            if title == "Item-0" || title.isEmpty {
+                self.title = "\(title)#\(itemWindow.windowID)"
+            } else {
+                self.title = title
+            }
         } else {
-            self.title = ""
+            self.title = "#\(itemWindow.windowID)"
+        }
+        
+        // Debug: log items that might be Ice control items
+        let ns = self.namespace.rawValue
+        if ns.contains("Ice") || ns.contains("jordanbaird") {
+            Self.logger.debug("Ice item created: namespace=\(ns), title='\(self.title)', ownerPID=\(itemWindow.ownerPID), windowTitle=\(itemWindow.title ?? "nil")")
         }
     }
 }

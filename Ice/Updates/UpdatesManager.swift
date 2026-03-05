@@ -20,11 +20,19 @@ final class UpdatesManager: NSObject, ObservableObject {
 
     /// The underlying updater controller.
     private(set) lazy var updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
+        startingUpdater: false,
         updaterDelegate: self,
         userDriverDelegate: self
     )
 
+	func startUpdater() {
+		do {
+			try updater.start()
+		} catch {
+			Logger.updatesManager.error("Failed to start updater: \(error)")
+		}
+	}
+	
     /// The underlying updater.
     var updater: SPUUpdater {
         updaterController.updater
@@ -77,7 +85,10 @@ final class UpdatesManager: NSObject, ObservableObject {
         #if DEBUG
         // Checking for updates hangs in debug mode.
         let alert = NSAlert()
-        alert.messageText = "Checking for updates is not supported in debug mode."
+        alert.messageText = NSLocalizedString(
+            "Checking for updates is not supported in debug mode.",
+            comment: "Alert title"
+        )
         alert.runModal()
         #else
         guard let appState else {
@@ -127,8 +138,11 @@ extension UpdatesManager: @preconcurrency SPUStandardUserDriverDelegate {
         if !state.userInitiated {
             appState.userNotificationManager.addRequest(
                 with: .updateCheck,
-                title: "A new update is available",
-                body: "Version \(update.displayVersionString) is now available"
+                title: NSLocalizedString("A new update is available", comment: "Notification title"),
+                body: String(
+                    format: NSLocalizedString("Version %@ is now available", comment: "Notification body"),
+                    update.displayVersionString
+                )
             )
         }
     }
@@ -143,3 +157,8 @@ extension UpdatesManager: @preconcurrency SPUStandardUserDriverDelegate {
 
 // MARK: UpdatesManager: BindingExposable
 extension UpdatesManager: BindingExposable { }
+
+// MARK: - Logger
+private extension Logger {
+	static let updatesManager = Logger(category: "UpdatesManager")
+}

@@ -60,13 +60,46 @@ final class ControlItem {
     var window: NSWindow? {
         statusItem.button?.window
     }
+    
+    /// The control item's button frame in screen coordinates.
+    var buttonFrameInScreen: CGRect? {
+        guard let button = statusItem.button, let window = button.window else {
+            return nil
+        }
+        // The button frame is relative to its window
+        // Use the window frame origin plus button bounds for screen coordinates
+        let windowFrame = window.frame
+        let buttonBounds = button.bounds
+        // Convert button bounds to window coordinates
+        let buttonFrameInWindow = button.convert(buttonBounds, to: nil)
+        // Add window origin to get screen coordinates
+        return CGRect(
+            x: windowFrame.origin.x + buttonFrameInWindow.origin.x,
+            y: windowFrame.origin.y + buttonFrameInWindow.origin.y,
+            width: buttonFrameInWindow.width,
+            height: buttonFrameInWindow.height
+        )
+    }
 
+    private static let logger = Logger(category: "ControlItem")
+    
     /// The identifier of the control item's window.
     var windowID: CGWindowID? {
         guard let window else {
             return nil
         }
-        return CGWindowID(window.windowNumber)
+        let windowNumber = window.windowNumber
+        Self.logger.debug("windowNumber=\(windowNumber) for \(identifier.rawValue)")
+        guard windowNumber > 0 else {
+            return nil
+        }
+        // macOS 26+: windowNumber format changed - ID is in high 32 bits
+        // Try high bits first, then low bits for backwards compatibility
+        let highBits = CGWindowID(windowNumber >> 32)
+        let lowBits = CGWindowID(truncatingIfNeeded: windowNumber)
+        let resultID = highBits > 0 ? highBits : lowBits
+        Self.logger.debug("windowID=\(resultID) (high=\(highBits), low=\(lowBits)) for \(identifier.rawValue)")
+        return resultID > 0 ? resultID : nil
     }
 
     /// A Boolean value that indicates whether the control item serves as
@@ -394,12 +427,17 @@ final class ControlItem {
         else {
             return
         }
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let showContextMenus = appState.settingsManager.advancedSettingsManager.showContextMenuOnRightClick
         switch event.type {
         case .leftMouseDown, .leftMouseUp:
-            if NSEvent.modifierFlags == .control {
+            if
+                modifiers == .control,
+                showContextMenus
+            {
                 statusItem.showMenu(createMenu(with: appState))
             } else if
-                NSEvent.modifierFlags == .option,
+                modifiers == .option,
                 appState.settingsManager.advancedSettingsManager.canToggleAlwaysHiddenSection
             {
                 if let alwaysHiddenSection = appState.menuBarManager.section(withName: .alwaysHidden) {
@@ -409,6 +447,9 @@ final class ControlItem {
                 section?.toggle()
             }
         case .rightMouseUp:
+            guard showContextMenus else {
+                return
+            }
             statusItem.showMenu(createMenu(with: appState))
         default:
             break
@@ -422,10 +463,10 @@ final class ControlItem {
             return hotkeySettingsManager.hotkey(withAction: action)
         }
 
-        let menu = NSMenu(title: "Ice")
+        let menu = NSMenu(title: NSLocalizedString("Ice", comment: "Menu title"))
 
         let settingsItem = NSMenuItem(
-            title: "Ice Settings…",
+            title: NSLocalizedString("Ice Settings…", comment: "Menu item"),
             action: #selector(AppDelegate.openSettingsWindow),
             keyEquivalent: ","
         )
@@ -435,7 +476,7 @@ final class ControlItem {
         menu.addItem(.separator())
 
         let searchItem = NSMenuItem(
-            title: "Search Menu Bar Items",
+            title: NSLocalizedString("Search Menu Bar Items", comment: "Menu item"),
             action: #selector(showSearchPanel),
             keyEquivalent: ""
         )
@@ -462,7 +503,15 @@ final class ControlItem {
                 continue
             }
             let item = NSMenuItem(
-                title: "\(section.isHidden ? "Show" : "Hide") the \(name.displayString) Section",
+                title: section.isHidden
+                    ? String(
+                        format: NSLocalizedString("Show the %@ Section", comment: "Menu item"),
+                        name.displayString
+                    )
+                    : String(
+                        format: NSLocalizedString("Hide the %@ Section", comment: "Menu item"),
+                        name.displayString
+                    ),
                 action: #selector(toggleMenuBarSection),
                 keyEquivalent: ""
             )
@@ -494,7 +543,7 @@ final class ControlItem {
         menu.addItem(.separator())
 
         let checkForUpdatesItem = NSMenuItem(
-            title: "Check for Updates…",
+            title: NSLocalizedString("Check for Updates…", comment: "Menu item"),
             action: #selector(checkForUpdates),
             keyEquivalent: ""
         )
@@ -504,7 +553,7 @@ final class ControlItem {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "Quit Ice",
+            title: NSLocalizedString("Quit Ice", comment: "Menu item"),
             action: #selector(NSApp.terminate),
             keyEquivalent: "q"
         )

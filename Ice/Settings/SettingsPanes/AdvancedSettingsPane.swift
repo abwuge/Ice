@@ -19,11 +19,12 @@ struct AdvancedSettingsPane: View {
 
     private func formattedToSeconds(_ interval: TimeInterval) -> LocalizedStringKey {
         let formatted = interval.formatted()
-        return if interval == 1 {
-            LocalizedStringKey(formatted + " second")
+        let localized = if interval == 1 {
+            String(format: NSLocalizedString("%@ second", comment: "Time interval (singular)"), formatted)
         } else {
-            LocalizedStringKey(formatted + " seconds")
+            String(format: NSLocalizedString("%@ seconds", comment: "Time interval (plural)"), formatted)
         }
+        return LocalizedStringKey(localized)
     }
 
     var body: some View {
@@ -141,7 +142,8 @@ struct AdvancedSettingsPane: View {
 
     @ViewBuilder
     private var showContextMenuOnRightClick: some View {
-        Toggle("Show context menu on right click", isOn: manager.bindings.showContextMenuOnRightClick)
+        Toggle("Show Ice context menus on right click", isOn: manager.bindings.showContextMenuOnRightClick)
+            .annotation("Disable this to ignore Ice right-click menus for better compatibility with apps like DynamicLake. When disabled, Option + Command + click in the menu bar opens Ice settings.")
     }
 
     @ViewBuilder
