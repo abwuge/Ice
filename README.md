@@ -16,6 +16,10 @@ Ice 是一款强大的菜单栏管理工具。它的核心能力是隐藏与显�
 
 English README → https://github.com/jordanbaird/Ice#readme
 
+CI 配置说明 → [ci.md](ci.md)
+
+如果你不想在本地编译，可以直接使用 GitHub Actions 的 CI 构建产物（见上方 `ci.md` 说明）。
+
 ## 中文说明
 
 Ice 是一款强大的菜单栏管理工具。它的核心能力是隐藏与显示菜单栏项目，同时也提供丰富的外观与交互选项，目标是成为最灵活的菜单栏工具之一。

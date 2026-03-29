@@ -12,6 +12,7 @@ on:
       - ".github/workflows/build.yml"
       - "Ice.xcodeproj/**"
       - "Ice/**"
+  workflow_dispatch:
 
 concurrency:
   group: build-${{ github.ref }}
