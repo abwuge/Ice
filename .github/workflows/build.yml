@@ -21,15 +21,19 @@ jobs:
   build:
     if: '!github.event.pull_request.merged'
     runs-on: macos-latest
+    env:
+      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Import code-signing certificate
-        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' && secrets.P12_PASSWORD != '' }}
+        if: ${{ env.BUILD_CERTIFICATE_BASE64 != '' && env.P12_PASSWORD != '' }}
         uses: apple-actions/import-codesign-certs@v3
         with:
-          p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.P12_PASSWORD }}
+          p12-file-base64: ${{ env.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ env.P12_PASSWORD }}
 
       - name: Cache Swift Package Manager dependencies
         uses: actions/cache@v4
@@ -52,7 +56,7 @@ jobs:
             build
 
       - name: Sign and verify app
-        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' && secrets.P12_PASSWORD != '' && secrets.SIGNING_IDENTITY != '' }}
+        if: ${{ env.BUILD_CERTIFICATE_BASE64 != '' && env.P12_PASSWORD != '' && env.SIGNING_IDENTITY != '' }}
         run: |
           APP_PATH=".build/DerivedData/Build/Products/Release/Ice.app"
           if [ ! -d "$APP_PATH" ]; then
@@ -66,7 +70,7 @@ jobs:
             --options runtime \
             --timestamp \
             --entitlements Ice/Ice.entitlements \
-            --sign "${{ secrets.SIGNING_IDENTITY }}" \
+            --sign "$SIGNING_IDENTITY" \
             "$APP_PATH"
 
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
