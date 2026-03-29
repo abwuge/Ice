@@ -26,17 +26,17 @@ jobs:
       P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
       SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Import code-signing certificate
         if: ${{ env.BUILD_CERTIFICATE_BASE64 != '' && env.P12_PASSWORD != '' }}
-        uses: apple-actions/import-codesign-certs@v3
+        uses: apple-actions/import-codesign-certs@v6
         with:
           p12-file-base64: ${{ env.BUILD_CERTIFICATE_BASE64 }}
           p12-password: ${{ env.P12_PASSWORD }}
 
       - name: Cache Swift Package Manager dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .build/SourcePackages
           key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
