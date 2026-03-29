@@ -1,0 +1,72 @@
+name: Build App
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/build.yml"
+      - "Ice.xcodeproj/**"
+      - "Ice/**"
+  pull_request:
+    paths:
+      - ".github/workflows/build.yml"
+      - "Ice.xcodeproj/**"
+      - "Ice/**"
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: '!github.event.pull_request.merged'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import code-signing certificate
+        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' && secrets.P12_PASSWORD != '' }}
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.P12_PASSWORD }}
+
+      - name: Cache Swift Package Manager dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build Ice
+        run: |
+          xcodebuild \
+            -project Ice.xcodeproj \
+            -scheme Ice \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath .build/DerivedData \
+            -clonedSourcePackagesDirPath .build/SourcePackages \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Sign and verify app
+        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' && secrets.P12_PASSWORD != '' && secrets.SIGNING_IDENTITY != '' }}
+        run: |
+          APP_PATH=".build/DerivedData/Build/Products/Release/Ice.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Ice.app not found at $APP_PATH"
+            exit 1
+          fi
+
+          codesign \
+            --force \
+            --deep \
+            --options runtime \
+            --timestamp \
+            --entitlements Ice/Ice.entitlements \
+            --sign "${{ secrets.SIGNING_IDENTITY }}" \
+            "$APP_PATH"
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
